@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Neon Melt Maze</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #050508;
+            color: #fff;
+            font-family: 'Courier New', Courier, monospace;
+            overflow: hidden;
+            touch-action: none;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            width: 100vw;
+        }
+
+        canvas {
+            display: block;
+            box-shadow: 0 0 20px rgba(0, 255, 255, 0.1);
+        }
+
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+
+        #timer {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            font-size: 24px;
+            font-weight: bold;
+            color: #0ff;
+            text-shadow: 0 0 10px #0ff;
+        }
+
+        #message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 32px;
+            text-align: center;
+            color: #fff;
+            text-shadow: 0 0 15px #f0f;
+            background: rgba(0,0,0,0.7);
+            padding: 20px;
+            border-radius: 10px;
+            border: 2px solid #f0f;
+            display: none;
+        }
+
+        #instructions {
+            position: absolute;
+            bottom: 20px;
+            width: 100%;
+            text-align: center;
+            font-size: 14px;
+            color: #888;
+        }
+
+        .show { display: block !important; }
+    </style>
+</head>
+<body>
+
+    <canvas id="gameCanvas"></canvas>
+    
+    <div id="ui-layer">
+        <div id="timer">0.00s</div>
+        <div id="message"></div>
+        <div id="instructions">Swipe or Arrow Keys to move.<br>Don't stay still for more than 0.5s!</div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const timerEl = document.getElementById('timer');
+        const messageEl = document.getElementById('message');
+        const instructionsEl = document.getElementById('instructions');
+
+        // Game Configuration
+        const GRID_SIZE = 23;
+        const MELT_TIME_MAX = 500; // ms
+        const PLAYER_SPEED = 30; // tiles per second
+        
+        let tileSize;
+        let grid = [];
+        let exitPoint = null;
+        let gameTime = 0;
+        let lastTimestamp = 0;
+        let isRunning = true;
+        
+        // 8 Possible Exit Locations (Corners and middle of edges)
+        const exitLocations = [
+            {x: 1, y: 1}, {x: 21, y: 1}, {x: 1, y: 21}, {x: 21, y: 21},
+            {x: 11, y: 1}, {x: 11, y: 21}, {x: 1, y: 11}, {x: 21, y: 11}
+        ];
+
+        let player = {
+            gx: 11, gy: 11, // Grid X, Y
+            px: 11, py: 11, // Pixel X, Y (in grid units)
+            vx: 0, vy: 0,
+            state: 'IDLE', // IDLE, MOVING, STOPPED, DEAD, WON
+            meltTimer: MELT_TIME_MAX
+        };
+
+        function resize() {
+            const minDim = Math.min(window.innerWidth, window.innerHeight) * 0.95;
+            tileSize = Math.floor(minDim / GRID_SIZE);
+            canvas.width = tileSize * GRID_SIZE;
+            canvas.height = tileSize * GRID_SIZE;
+            
+            // Safety Check: Only draw if the grid layout has actually been generated
+            if (grid && grid.length === GRID_SIZE) {
+                draw();
+            }
+        }
+
+        function generateMaze() {
+            // Initialize solid grid
+            grid = Array.from({ length: GRID_SIZE }, () => Array(GRID_SIZE).fill(1));
+            
+            // DFS to carve paths
+            function carve(cx, cy) {
+                grid[cy][cx] = 0;
+                const dirs = [ [0, -1], [0, 1], [-1, 0], [1, 0] ].sort(() => Math.random() - 0.5);
+                
+                for (let [dx, dy] of dirs) {
+                    const nx = cx + dx * 2;
+                    const ny = cy + dy * 2;
+                    if (nx > 0 && nx < GRID_SIZE - 1 && ny > 0 && ny < GRID_SIZE - 1 && grid[ny][nx] === 1) {
+                        grid[cy + dy][cx + dx] = 0; // Break wall
+                        carve(nx, ny);
+                    }
+                }
+            }
+            
+            carve(11, 11); // Start carving from center
+
+            // Remove some random walls to create loops & longer dash sequences
+            for (let i = 0; i < 40; i++) {
+                let rx = Math.floor(Math.random() * (GRID_SIZE - 2)) + 1;
+                let ry = Math.floor(Math.random() * (GRID_SIZE - 2)) + 1;
+                grid[ry][rx] = 0;
+            }
+            
+            // Ensure exit is accessible
+            exitPoint = exitLocations[Math.floor(Math.random() * exitLocations.length)];
+            grid[exitPoint.y][exitPoint.x] = 0; // Force exit to be open
+        }
+
+        function initGame() {
+            generateMaze();
+            player = {
+                gx: 11, gy: 11,
+                px: 11, py: 11,
+                vx: 0, vy: 0,
+                state: 'IDLE',
+                meltTimer: MELT_TIME_MAX
+            };
+            gameTime = 0;
+            timerEl.innerText = "0.00s";
+            timerEl.style.color = "#0ff";
+            messageEl.classList.remove('show');
+            instructionsEl.classList.add('show');
+            lastTimestamp = performance.now();
+            isRunning = true;
+            requestAnimationFrame(gameLoop);
+        }
+
+        function handleInput(dx, dy) {
+            if (player.state === 'DEAD' || player.state === 'WON') {
+                initGame();
+                return;
+            }
+
+            if (player.state === 'IDLE' || player.state === 'STOPPED') {
+                // Safety Guard: Ensure grid row exists before checking index
+                if (grid[player.gy + dy] && grid[player.gy + dy][player.gx + dx] === 0) {
+                    player.vx = dx;
+                    player.vy = dy;
+                    player.state = 'MOVING';
+                    instructionsEl.classList.remove('show');
+                }
+            }
+        }
+
+        // Keyboard Controls
+        window.addEventListener('keydown', (e) => {
+            let dx = 0, dy = 0;
+            if (e.key === 'ArrowUp' || e.key === 'w') dy = -1;
+            else if (e.key === 'ArrowDown' || e.key === 's') dy = 1;
+            else if (e.key === 'ArrowLeft' || e.key === 'a') dx = -1;
+            else if (e.key === 'ArrowRight' || e.key === 'd') dx = 1;
+
+            if (dx !== 0 || dy !== 0) handleInput(dx, dy);
+        });
+
+        // Touch Controls (Swiping)
+        let touchStartX = 0, touchStartY = 0;
+        window.addEventListener('touchstart', e => {
+            touchStartX = e.changedTouches[0].screenX;
+            touchStartY = e.changedTouches[0].screenY;
+        }, {passive: false});
+
+        window.addEventListener('touchend', e => {
+            let touchEndX = e.changedTouches[0].screenX;
+            let touchEndY = e.changedTouches[0].screenY;
+            
+            let dx = touchEndX - touchStartX;
+            let dy = touchEndY - touchStartY;
+            
+            if (Math.abs(dx) > Math.abs(dy)) {
+                if (Math.abs(dx) > 30) handleInput(Math.sign(dx), 0);
+            } else {
+                if (Math.abs(dy) > 30) handleInput(0, Math.sign(dy));
+            }
+            
+            // Tap to restart if dead/won
+            if (Math.abs(dx) < 10 && Math.abs(dy) < 10 && (player.state === 'DEAD' || player.state === 'WON')) {
+                initGame();
+            }
+        }, {passive: false});
+        
+        // Prevent default touch actions (scrolling/zooming)
+        window.addEventListener('touchmove', e => e.preventDefault(), {passive: false});
+
+        function update(dt) {
+            if (player.state === 'DEAD' || player.state === 'WON') return;
+
+            // Timer update
+            if (player.state !== 'IDLE') {
+                gameTime += dt;
+                timerEl.innerText = (gameTime / 1000).toFixed(2) + "s";
+            }
+
+            if (player.state === 'MOVING') {
+                let speed = (PLAYER_SPEED / 1000) * dt;
+                player.px += player.vx * speed;
+                player.py += player.vy * speed;
+
+                let targetX = player.gx + player.vx;
+                let targetY = player.gy + player.vy;
+
+                // Did we cross the center of the next tile?
+                if ((player.vx > 0 && player.px >= targetX) ||
+                    (player.vx < 0 && player.px <= targetX) ||
+                    (player.vy > 0 && player.py >= targetY) ||
+                    (player.vy < 0 && player.py <= targetY)) {
+                    
+                    // Snap to the tile
+                    player.gx = targetX;
+                    player.gy = targetY;
+                    player.px = targetX;
+                    player.py = targetY;
+
+                    // Check if the next tile in the SAME direction is a wall
+                    if (grid[player.gy + player.vy] && grid[player.gy + player.vy][player.gx + player.vx] === 1) {
+                        player.vx = 0;
+                        player.vy = 0;
+                        player.state = 'STOPPED';
+                        player.meltTimer = MELT_TIME_MAX;
+                    }
+                }
+            } else if (player.state === 'STOPPED') {
+                player.meltTimer -= dt;
+                if (player.meltTimer <= 0) {
+                    player.state = 'DEAD';
+                    timerEl.style.color = "#f00";
+                    messageEl.innerHTML = "MELTED!<br><span style='font-size:20px'>Tap or Press Key to Restart</span>";
+                    messageEl.style.borderColor = "#f00";
+                    messageEl.style.textShadow = "0 0 15px #f00";
+                    messageEl.classList.add('show');
+                }
+            }
+
+            // Win Condition
+            if (exitPoint && player.gx === exitPoint.x && player.gy === exitPoint.y) {
+                player.state = 'WON';
+                timerEl.style.color = "#0f0";
+                messageEl.innerHTML = `ESCAPED!<br><span style='font-size:20px'>Time: ${(gameTime/1000).toFixed(2)}s<br>Tap or Press Key to Restart</span>`;
+                messageEl.style.borderColor = "#0f0";
+                messageEl.style.textShadow = "0 0 15px #0f0";
+                messageEl.classList.add('show');
+            }
+        }
+
+        function draw() {
+            if (!grid || grid.length === 0 || !exitPoint) return;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw Maze
+            ctx.fillStyle = '#0a0a2a'; // Wall color
+            ctx.strokeStyle = '#00ffff';
+            ctx.lineWidth = 1;
+            
+            for (let y = 0; y < GRID_SIZE; y++) {
+                for (let x = 0; x < GRID_SIZE; x++) {
+                    if (grid[y] && grid[y][x] === 1) {
+                        ctx.shadowBlur = 5;
+                        ctx.shadowColor = '#00ffff';
+                        ctx.fillRect(x * tileSize, y * tileSize, tileSize, tileSize);
+                        ctx.shadowBlur = 0;
+                        ctx.strokeRect(x * tileSize, y * tileSize, tileSize, tileSize);
+                    }
+                }
+            }
+
+            // Draw Exit
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = '#ff00ff';
+            ctx.fillStyle = '#ff00ff';
+            
+            // Pulsing effect for exit
+            const pulse = Math.abs(Math.sin(Date.now() / 200)) * (tileSize / 4);
+            ctx.fillRect(
+                exitPoint.x * tileSize + pulse/2,
+                exitPoint.y * tileSize + pulse/2,
+                tileSize - pulse,
+                tileSize - pulse
+            );
+
+            // Draw Player
+            const px = player.px * tileSize;
+            const py = player.py * tileSize;
+            
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = '#ffff00';
+            ctx.fillStyle = '#ffff00';
+            
+            // If dead, turn ash/red
+            if (player.state === 'DEAD') {
+                ctx.fillStyle = '#ff0000';
+                ctx.shadowColor = '#ff0000';
+            }
+
+            // Shake effect if melting
+            let rx = px, ry = py;
+            if (player.state === 'STOPPED' && player.meltTimer < 250) {
+                rx += (Math.random() - 0.5) * 4;
+                ry += (Math.random() - 0.5) * 4;
+            }
+
+            // Draw Player Box
+            ctx.fillRect(rx + 2, ry + 2, tileSize - 4, tileSize - 4);
+
+            // Draw Melt Warning Aura
+            if (player.state === 'STOPPED') {
+                const ratio = player.meltTimer / MELT_TIME_MAX;
+                ctx.shadowBlur = 20;
+                ctx.shadowColor = '#ff0000';
+                ctx.strokeStyle = '#ff0000';
+                ctx.lineWidth = 3;
+                
+                ctx.beginPath();
+                ctx.arc(rx + tileSize/2, ry + tileSize/2, tileSize * 0.8, -Math.PI/2, (-Math.PI/2) + (Math.PI * 2 * ratio));
+                ctx.stroke();
+            }
+
+            ctx.shadowBlur = 0; // Reset
+        }
+
+        function gameLoop(timestamp) {
+            if (!isRunning) return;
+            const dt = timestamp - lastTimestamp;
+            lastTimestamp = timestamp;
+
+            // Cap dt to prevent massive jumps if tab is backgrounded
+            if (dt < 100) {
+                update(dt);
+            }
+            
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // CORRECTED INITIALIZATION ORDER
+        window.addEventListener('resize', resize);
+        initGame(); // Initialize data structures first
+        resize();   // Calculate metrics and draw safe first frame
+
+    </script>
+</body>
+</html>
