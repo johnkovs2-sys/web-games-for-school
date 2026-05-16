@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Penta Boss</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.js"></script>
+</head>
+<body>
+  <button style="position:absolute;bottom:0;right:0" onclick="window.location.href='OriginalPentaBossCode.pdf'">View original python source code from 6th grade</button>
+  <script>
+    // Game variables
+    let player;
+    let bolt;
+    let boss;
+    let bossBar, bossBarBack;
+    let bossShield;
+    let hazard;
+    let score = 0;
+    let gameOver = false;
+    let gameOverText = "";
+    let gameOverColor = "";
+    
+    function setup() {
+        createCanvas(400, 400); // Standard CMU canvas dimensions
+        
+        // Player object configuration
+        player = { x: 200, y: 360, speed: 10 };
+        
+        // Bolt/Projectile object
+        bolt = { x: 195, y: 320, w: 10, h: 20, ready: true, visible: false };
+        
+        // Boss setup
+        boss = { x: 200, y: 120, radius: 50, sides: 5, health: 230, angle: 0 };
+        bossBarBack = { x: 80, y: 15, w: 240, h: 20 };
+        bossBar = { x: 85, y: 20, w: 230, h: 10 };
+        
+        // Boss Shield setup
+        bossShield = { x: 200, y: 120, radius: 40, sides: 5, growing: true, angle: 0 };
+        
+        // Hazard/Enemy projectile setup
+        hazard = { x: 200, y: -300, radius: 10, sides: 3, angle: 0 };
+    }
+    
+    function draw() {
+        background('black');
+        
+        if (!gameOver) {
+            // --- 1. KEYBOARD INPUTS ---
+            handleInput();
+    
+            // --- 2. GAME LOGIC / ANIMATION (Your onStep logic) ---
+            boss.angle += 3;
+            
+            // Move player's bolt upward
+            if (bolt.visible) {
+                bolt.y -= 7;
+                if (bolt.y + bolt.h <= 0) {
+                    bolt.ready = true;
+                    bolt.visible = false;
+                }
+            }
+            
+            // Update Boss Health Bar
+            if (boss.health > 0) {
+                bossBar.w = boss.health;
+            } else {
+                triggerGameOver('You Win!', 'green');
+            }
+    
+            // Check Bolt hitting Boss
+            if (bolt.visible && dist(bolt.x + bolt.w/2, bolt.y, boss.x, boss.y) < boss.radius) {
+                boss.health -= 1;
+                bolt.ready = true;
+                bolt.visible = false;
+            }
+    
+            // Phase 2: Shield Logic (Activates when boss health < 70)
+            if (boss.health < 70) {
+                bossShield.angle -= 3;
+                bossShield.x = boss.x;
+                bossShield.y = boss.y;
+                
+                // Shield breathing/pulsing animation
+                if (bossShield.radius < 10) bossShield.growing = true;
+                if (bossShield.radius > 80) bossShield.growing = false;
+                
+                if (bossShield.growing) bossShield.radius += 2;
+                else bossShield.radius -= 2;
+    
+                // Check Bolt hitting Shield
+                if (bolt.visible && dist(bolt.x + bolt.w/2, bolt.y, bossShield.x, bossShield.y) < bossShield.radius) {
+                    bolt.visible = false;
+                    bolt.ready = true;
+                }
+            }
+    
+            // Hazard Animation & Logic
+            hazard.y += 5;
+            hazard.angle += 2;
+            if (hazard.y - hazard.radius > 400) {
+                hazard.x = player.x; // Respawns tracking the player's last X coordinate
+                hazard.y = 0;
+            }
+    
+            // Check Hazard hitting Player
+            if (dist(hazard.x, hazard.y, player.x, player.y) < hazard.radius + 15) {
+                triggerGameOver('You Lose!', 'red');
+            }
+        }
+    
+        // --- 3. DRAWING EVERYTHING ---
+        drawGameObjects();
+    }
+    
+    // Clean keyboard input checking inside the loop
+    function handleInput() {
+        if (keyIsDown(LEFT_ARROW) || keyIsDown(65)) { // Left arrow or 'A'
+            if (player.x > 20) player.x -= player.speed;
+        }
+        if (keyIsDown(RIGHT_ARROW) || keyIsDown(68)) { // Right arrow or 'D'
+            if (player.x < 380) player.x += player.speed;
+        }
+    }
+    
+    // Separate function to catch the single tap of the spacebar
+    function keyPressed() {
+        if (key === ' ' && bolt.ready && !gameOver) {
+            bolt.x = player.x - bolt.w / 2;
+            bolt.y = player.y - 30;
+            bolt.visible = true;
+            bolt.ready = false;
+        }
+    }
+    
+    function triggerGameOver(textMsg, colorTheme) {
+        gameOver = true;
+        gameOverText = textMsg;
+        gameOverColor = colorTheme;
+    }
+    
+    function drawGameObjects() {
+        // Draw Boss Health Bar Background
+        if (boss.health > 0) {
+            fill('darkgray'); stroke('gray'); strokeWeight(5);
+            rect(bossBarBack.x, bossBarBack.y, bossBarBack.w, bossBarBack.h);
+            fill('red'); noStroke();
+            rect(bossBar.x, bossBar.y, bossBar.w, bossBar.h);
+        }
+    
+        // Draw Boss Shield (Regular Polygon helper)
+        if (!gameOver && boss.health < 70) {
+            noFill(); stroke('lightblue'); strokeWeight(5);
+            drawPolygon(bossShield.x, bossShield.y, bossShield.radius, bossShield.sides, bossShield.angle);
+        }
+    
+        // Draw Boss
+        if (boss.health > 0) {
+            fill('magenta'); stroke('purple'); strokeWeight(35);
+            drawPolygon(boss.x, boss.y, boss.radius, boss.sides, boss.angle);
+        }
+    
+        // Draw Hazard Projectile
+        if (!gameOver) {
+            fill('magenta'); stroke('darkmagenta'); strokeWeight(3);
+            drawPolygon(hazard.x, hazard.y, hazard.radius, hazard.sides, hazard.angle);
+        }
+    
+        // Draw Player's Bolt
+        if (bolt.visible) {
+            // Simple linear color representation for CMU gradients
+            fill('deeppink'); noStroke();
+            rect(bolt.x, bolt.y, bolt.w, bolt.h);
+        }
+    
+        // Draw Player Ship (Simplified Custom Polygon mapped to player center)
+        fill('lime'); noStroke();
+        push();
+        translate(player.x, player.y);
+        beginShape();
+        vertex(0, -25);   // Nose cone
+        vertex(-15, 10);  // Left wing tip
+        vertex(-5, 5);    // Left inner hull
+        vertex(-5, 20);   // Left thruster base
+        vertex(5, 20);    // Right thruster base
+        vertex(5, 5);     // Right inner hull
+        vertex(15, 10);   // Right wing tip
+        endShape(CLOSE);
+        pop();
+    
+        // Game Over Overlay Display
+        if (gameOver) {
+            fill(0, 0, 0, 200); // Dim the background slightly
+            rect(0, 0, 400, 400);
+            
+            textAlign(CENTER, CENTER);
+            textSize(60);
+            // Duplicate text outline trick from CMU
+            fill('black'); text(gameOverText, 202, 152);
+            fill(gameOverColor); text(gameOverText, 200, 150);
+        }
+    }
+    
+    // Mathematical helper function to mimic CMU's RegularPolygon style rotation
+    function drawPolygon(x, y, radius, npoints, rotationAngle) {
+        let angle = TWO_PI / npoints;
+        push();
+        translate(x, y);
+        rotate(radians(rotationAngle));
+        beginShape();
+        for (let a = 0; a < TWO_PI; a += angle) {
+            let sx = cos(a) * radius;
+            let sy = sin(a) * radius;
+            vertex(sx, sy);
+        }
+        endShape(CLOSE);
+        pop();
+    }
+  </script>
+</body>
+</html>
