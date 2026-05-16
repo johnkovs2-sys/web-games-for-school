@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Falpy Birb</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.js"></script>
+</head>
+<body>
+  <button style="position:absolute;bottom:0;right:0" onclick="window.location.href='OriginalFalpyBirbCode.pdf'">View original python source code from 6th grade</button>
+    <script>
+      let bird;
+      let cloud1, cloud2;
+      let topPipe1, bottomPipe1, topPipe2, bottomPipe2;
+      let score = 0;
+      let gameOver = false;
+      
+      function setup() {
+          createCanvas(400, 400);
+          bird = { x: 20, y: 190, size: 20, angle: 0 };
+          cloud1 = { x: 270, y: 40, w: 90, h: 50 };
+          cloud2 = { x: 50, y: 40, w: 80, h: 60 };
+          topPipe1 = { x: 200, h: 100, w: 50 };
+          bottomPipe1 = { x: 200, y: 170, w: 50, h: 230 };
+          topPipe2 = { x: 400, h: 50, w: 50 };
+          bottomPipe2 = { x: 400, y: 270, w: 50, h: 130 };
+      }
+      
+      function draw() {
+        background('#87CEEB');
+        
+        if (!gameOver) {
+            if (mouseIsPressed) {
+                bird.angle += 7;
+                bird.y -= 2;
+            } else {
+                bird.angle += 3;
+                bird.y += 2;
+            }
+            cloud1.x -= 2;
+            if (cloud1.x + cloud1.w < 0) cloud1.x = 400;
+            cloud2.x -= 2;
+            if (cloud2.x + cloud2.w < 0) cloud2.x = 400;
+            topPipe1.x -= 3;
+            bottomPipe1.x -= 3;
+            if (topPipe1.x + topPipe1.w < 0) { topPipe1.x = 400; bottomPipe1.x = 400; }
+            
+            topPipe2.x -= 3;
+            bottomPipe2.x -= 3;
+            if (topPipe2.x + topPipe2.w < 0) { topPipe2.x = 400; bottomPipe2.x = 400; }
+            score++;
+            if (checkCollision(bird, topPipe1) || checkCollision(bird, bottomPipe1, true) ||
+                checkCollision(bird, topPipe2) || checkCollision(bird, bottomPipe2, true)) {
+                gameOver = true;
+            }
+        }
+        fill('white');
+        noStroke();
+        ellipse(cloud1.x, cloud1.y, cloud1.w, cloud1.h);
+        ellipse(cloud2.x, cloud2.y, cloud2.w, cloud2.h);
+        fill('limegreen');
+        rect(topPipe1.x, 0, topPipe1.w, topPipe1.h);
+        rect(bottomPipe1.x, bottomPipe1.y, bottomPipe1.w, bottomPipe1.h);
+        rect(topPipe2.x, 0, topPipe2.w, topPipe2.h);
+        rect(bottomPipe2.x, bottomPipe2.y, bottomPipe2.w, bottomPipe2.h);
+        fill('limegreen'); rect(0, 350, 400, 50);
+        fill('#CD853F'); rect(0, 360, 400, 40);
+        fill('saddlebrown'); rect(0, 370, 400, 30);
+        push();
+        translate(bird.x + bird.size / 2, bird.y + bird.size / 2);
+        rotate(radians(bird.angle));
+        fill('gold');
+        stroke('orange');
+        strokeWeight(5);
+        rect(-bird.size / 2, -bird.size / 2, bird.size, bird.size);
+        pop();
+        if (gameOver) {
+            fill('firebrick');
+            stroke('darkred');
+            strokeWeight(20);
+            rect(20, 20, 360, 360);
+            
+            fill('red');
+            stroke('darkred');
+            strokeWeight(5);
+            textAlign(CENTER, CENTER);
+            textSize(50);
+            text("Game Over!", 200, 150);
+            textSize(40);
+            text("Score: " + score, 200, 250);
+        } else {
+            if (score < 100) {
+                textAlign(CENTER);
+                fill('gold'); stroke('orange'); strokeWeight(5); textSize(60);
+                text("Falpy Birb", 200, 100);
+                noStroke(); fill('gold'); textSize(10);
+                text("Credit - Inspired by Flappy Bird, dont sue me please", 200, 150);
+            }
+        }
+    }
+    function checkCollision(b, pipe, isBottom = false) {
+        let pipeTop = isBottom ? pipe.y : 0;
+        let pipeBottom = isBottom ? 400 : pipe.h;
+        
+        return (b.x < pipe.x + pipe.w &&
+                b.x + b.size > pipe.x &&
+                b.y < pipeBottom &&
+                b.y + b.size > pipeTop);
+    }
+    </script>
+</body>
+</html>
