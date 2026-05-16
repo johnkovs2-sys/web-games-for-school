@@ -1,5 +1,0 @@
-
-_________________
-NEODASH----------
-
-generate a single-file html game that is similar to geometry dash platform mode where you have to jump on enemies to get a high score
