@@ -12,3 +12,8 @@ kind of like a fast-paced, minimalist neon tomb of the mask that is an actual ma
 there is a timer in the corner timing your completion, and the exit is at one of 8 locations every time
 the timer and lasers do not start until you move
 do not use localstorage, cookies, cache, indexedDB, or anything of the sort that requires secure context
+
+
+________________
+FALLING STARS---
+yo twin generate me a browser game
