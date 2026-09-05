@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Catch the Stars</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            background: #111;
+            color: #fff;
+            font-family: sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+        #ui {
+            margin-bottom: 10px;
+            font-size: 24px;
+            font-weight: bold;
+            letter-spacing: 1px;
+        }
+        #gameCanvas {
+            background: linear-gradient(to bottom, #1a0b2e, #05020a);
+            border: 4px solid #8a2be2;
+            border-radius: 8px;
+            box-shadow: 0 0 20px rgba(138, 43, 226, 0.5);
+            cursor: none;
+        }
+        #gameOverScreen {
+            display: none;
+            position: absolute;
+            text-align: center;
+            background: rgba(0, 0, 0, 0.85);
+            padding: 30px;
+            border-radius: 10px;
+            border: 2px solid #ff0055;
+        }
+        h1 {
+            color: #ff0055;
+            margin-bottom: 10px;
+        }
+        button {
+            margin-top: 15px;
+            padding: 10px 20px;
+            font-size: 18px;
+            font-weight: bold;
+            background: #8a2be2;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #a040f0;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="ui">Score: <span id="score">0</span> | Lives: <span id="lives">3</span></div>
+    <canvas id="gameCanvas" width="400" height="500"></canvas>
+
+    <div id="gameOverScreen" id="gameOverScreen">
+        <h1>Game Over</h1>
+        <p>Final Score: <span id="finalScore">0</span></p>
+        <button onclick="resetGame()">Play Again</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
+        const scoreEl = document.getElementById("score");
+        const livesEl = document.getElementById("lives");
+        const gameOverScreen = document.getElementById("gameOverScreen");
+        const finalScoreEl = document.getElementById("finalScore");
+
+        // Game state
+        let score = 0;
+        let lives = 3;
+        let gameActive = true;
+        let stars = [];
+        let spawnTimer = 0;
+
+        // Basket properties
+        const basket = {
+            x: canvas.width / 2 - 40,
+            y: canvas.height - 30,
+            width: 80,
+            height: 15,
+            color: "#00ffcc"
+        };
+
+        // Track mouse movement
+        canvas.addEventListener("mousemove", (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            // Keep basket fully inside canvas boundaries
+            basket.x = Math.max(0, Math.min(canvas.width - basket.width, mouseX - basket.width / 2));
+        });
+
+        // Track touch movement for mobile browsers
+        canvas.addEventListener("touchmove", (e) => {
+            e.preventDefault();
+            const rect = canvas.getBoundingClientRect();
+            const touchX = e.touches[0].clientX - rect.left;
+            basket.x = Math.max(0, Math.min(canvas.width - basket.width, touchX - basket.width / 2));
+        }, { passive: false });
+
+        function spawnStar() {
+            const size = 12;
+            const x = Math.random() * (canvas.width - size * 2) + size;
+            // Increase speed slightly as score gets higher
+            const speed = Math.random() * 2 + 2 + (score * 0.1); 
+            stars.push({ x, y: -size, size, speed });
+        }
+
+        function drawBasket() {
+            ctx.fillStyle = basket.color;
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = basket.color;
+            ctx.fillRect(basket.x, basket.y, basket.width, basket.height);
+            ctx.shadowBlur = 0; // Reset shadow
+        }
+
+        function drawStars() {
+            ctx.fillStyle = "#ffdf00";
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = "#ffdf00";
+            
+            stars.forEach(star => {
+                ctx.beginPath();
+                ctx.arc(star.x, star.y, star.size, 0, Math.PI * 2);
+                ctx.fill();
+            });
+            
+            ctx.shadowBlur = 0; // Reset shadow
+        }
+
+        function updateStars() {
+            for (let i = stars.length - 1; i >= 0; i--) {
+                let s = stars[i];
+                s.y += s.speed;
+
+                // Collision checking (Star hits basket)
+                if (s.y + s.size >= basket.y && 
+                    s.x >= basket.x && 
+                    s.x <= basket.x + basket.width) {
+                    score++;
+                    scoreEl.textContent = score;
+                    stars.splice(i, 1);
+                    continue;
+                }
+
+                // Star falls past screen
+                if (s.y - s.size > canvas.height) {
+                    lives--;
+                    livesEl.textContent = lives;
+                    stars.splice(i, 1);
+
+                    if (lives <= 0) {
+                        endGame();
+                    }
+                }
+            }
+        }
+
+        function endGame() {
+            gameActive = false;
+            finalScoreEl.textContent = score;
+            gameOverScreen.style.display = "block";
+        }
+
+        function resetGame() {
+            score = 0;
+            lives = 3;
+            stars = [];
+            gameActive = true;
+            scoreEl.textContent = score;
+            livesEl.textContent = lives;
+            gameOverScreen.style.display = "none";
+            requestAnimationFrame(gameLoop);
+        }
+
+        function gameLoop() {
+            if (!gameActive) return;
+
+            // Clear screen
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Spawn mechanics
+            spawnTimer++;
+            if (spawnTimer % 45 === 0) {
+                spawnStar();
+            }
+
+            // Update & Render
+            updateStars();
+            drawBasket();
+            drawStars();
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Start game
+        gameLoop();
+    </script>
+</body>
+</html>
